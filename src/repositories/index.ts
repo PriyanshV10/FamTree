@@ -55,3 +55,8 @@ export function getTreeRepository(): ITreeRepository {
   }
   return localRepositoryInstance;
 }
+
+export function resetRepositoryInstance(): void {
+  localRepositoryInstance = null;
+  supabaseRepositoryInstance = null;
+}

@@ -35,20 +35,27 @@ import {
   resetReferencePersonConfig,
 } from "@/lib/reference-person";
 import { ReferencePersonModal } from "./ReferencePersonModal";
-import { AlertCircle, X, Trash2 } from "lucide-react";
+import { ShareTreeModal } from "./ShareTreeModal";
+import { AlertCircle, X, Trash2, Eye, GitFork, LogIn } from "lucide-react";
+import { getPersonFullName } from "@/lib/utils";
+import { useAuth } from "@/components/auth/AuthContext";
+import { duplicateTreeToAccount } from "@/lib/tree-clone";
 
 interface TreeWorkspaceProps {
   initialTree: FamilyTree;
   initialPeople: Person[];
   initialRelationships: Relationship[];
+  initialShareRole?: "viewer" | "editor";
 }
 
 export function TreeWorkspace({
   initialTree,
   initialPeople,
   initialRelationships,
+  initialShareRole,
 }: TreeWorkspaceProps) {
   const router = useRouter();
+  const { user, profile } = useAuth();
   const [tree, setTree] = useState<FamilyTree>(initialTree);
   const [people, setPeople] = useState<Person[]>(initialPeople);
   const [relationships, setRelationships] = useState<Relationship[]>(initialRelationships);
@@ -56,6 +63,60 @@ export function TreeWorkspace({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDeleteTreeModalOpen, setIsDeleteTreeModalOpen] = useState(false);
   const [isDeletingTree, setIsDeletingTree] = useState(false);
+
+  // Share States & Access Control
+  const [shareRole] = useState<"viewer" | "editor" | null>(() => {
+    if (initialShareRole) return initialShareRole;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const s = params.get("share");
+      if (s === "viewer" || s === "editor") {
+        return s;
+      }
+    }
+    return null;
+  });
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isCloningTree, setIsCloningTree] = useState(false);
+  const [editorPromptDismissed, setEditorPromptDismissed] = useState(false);
+
+  const isOwner = Boolean(
+    (user && tree.ownerId && tree.ownerId === user.id) ||
+    (!user && (!tree.ownerId || tree.ownerId === "guest" || tree.ownerId === "local-curator"))
+  );
+
+  // Viewer link is strictly read-only for anyone.
+  // Editor link keeps the original tree read-only until copied to personal profile.
+  const isReadOnly = shareRole === "viewer" || (shareRole === "editor" && !isOwner);
+
+  const handleDuplicateTree = async () => {
+    if (!user) {
+      const returnUrl =
+        typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : `/trees/${tree.id}?share=editor`;
+      router.push(`/login?next=${encodeURIComponent(returnUrl)}`);
+      return;
+    }
+
+    setIsCloningTree(true);
+    setErrorMessage(null);
+    try {
+      const cloned = await duplicateTreeToAccount({
+        tree,
+        people,
+        relationships,
+        ownerId: user.id,
+        ownerName: user.user_metadata?.full_name || profile?.fullName || "Curator",
+        customTreeName: `${tree.name} (My Copy)`,
+      });
+      router.push(`/trees/${cloned.id}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to copy family tree.";
+      setErrorMessage(msg);
+      setIsCloningTree(false);
+    }
+  };
 
   // Sync latest persisted data from repository on mount
   useEffect(() => {
@@ -231,16 +292,19 @@ export function TreeWorkspace({
 
   // Person CRUD
   const handleOpenAddPerson = () => {
+    if (isReadOnly) return;
     setPersonToEdit(null);
     setIsAddEditPersonOpen(true);
   };
 
   const handleOpenEditPerson = (person: Person) => {
+    if (isReadOnly) return;
     setPersonToEdit(person);
     setIsAddEditPersonOpen(true);
   };
 
   const handleSavePerson = async (savedPerson: Person) => {
+    if (isReadOnly) return;
     setErrorMessage(null);
     const repo = getTreeRepository();
     const exists = people.some((p) => p.id === savedPerson.id);
@@ -266,6 +330,7 @@ export function TreeWorkspace({
   };
 
   const handleDeletePerson = async (person: Person) => {
+    if (isReadOnly) return;
     setErrorMessage(null);
     const repo = getTreeRepository();
     try {
@@ -291,6 +356,7 @@ export function TreeWorkspace({
     startDate?: string;
     notes?: string;
   }) => {
+    if (isReadOnly) return;
     setErrorMessage(null);
     const repo = getTreeRepository();
     try {
@@ -315,6 +381,7 @@ export function TreeWorkspace({
   };
 
   const handleRemoveRelationship = async (relId: string) => {
+    if (isReadOnly) return;
     setErrorMessage(null);
     const repo = getTreeRepository();
     try {
@@ -377,6 +444,7 @@ export function TreeWorkspace({
     importedRelationships: Relationship[],
     mode: "append" | "replace"
   ) => {
+    if (isReadOnly) return;
     setErrorMessage(null);
     const repo = getTreeRepository();
 
@@ -427,6 +495,7 @@ export function TreeWorkspace({
   };
 
   const handleDeleteThisTree = async () => {
+    if (isReadOnly) return;
     setIsDeletingTree(true);
     setErrorMessage(null);
     try {
@@ -442,6 +511,7 @@ export function TreeWorkspace({
 
   // Reference Person Handlers
   const handleSetReferencePerson = (person: Person) => {
+    if (isReadOnly) return;
     const newConfig: ReferencePersonConfig = {
       personId: person.id,
       baseGeneration: 0,
@@ -452,11 +522,13 @@ export function TreeWorkspace({
   };
 
   const handleSaveReferenceConfig = (config: ReferencePersonConfig) => {
+    if (isReadOnly) return;
     saveReferencePersonConfig(tree.id, config);
     setReferenceConfig(config);
   };
 
   const handleResetReferenceConfig = () => {
+    if (isReadOnly) return;
     resetReferencePersonConfig(tree.id);
     setReferenceConfig(getReferencePersonConfig(tree.id, people));
   };
@@ -466,6 +538,61 @@ export function TreeWorkspace({
       {/* Global Navigation */}
       <Navbar />
 
+      {/* Editor Duplicate Notice Banner */}
+      {shareRole === "editor" && !isOwner && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-emerald-50 dark:bg-emerald-950/60 border-b border-emerald-200 dark:border-emerald-800/80 px-4 py-2.5 text-xs text-emerald-900 dark:text-emerald-200">
+          <div className="flex items-center gap-2">
+            <GitFork className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" />
+            <span>
+              <strong>Shared Editor Link:</strong> Make a copy of this tree to your profile to begin editing.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {user ? (
+              <Button
+                size="sm"
+                onClick={handleDuplicateTree}
+                disabled={isCloningTree}
+                className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 shadow-xs"
+              >
+                <GitFork className="h-3.5 w-3.5" />
+                {isCloningTree ? "Copying Tree..." : "Copy to My Profile"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  const returnUrl =
+                    typeof window !== "undefined"
+                      ? window.location.pathname + window.location.search
+                      : `/trees/${tree.id}?share=editor`;
+                  router.push(`/login?next=${encodeURIComponent(returnUrl)}`);
+                }}
+                className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5 shadow-xs"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Sign In to Copy & Edit
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Read-Only Viewer Notice Banner */}
+      {shareRole === "viewer" && (
+        <div className="flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 px-4 py-2 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <Eye className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              <strong>Viewer Mode:</strong> You are viewing this family tree in read-only mode. Nothing will be saved.
+            </span>
+          </div>
+          <span className="rounded-full bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-300">
+            Read-Only
+          </span>
+        </div>
+      )}
+
       {/* Workspace Header Toolbar */}
       <TreeToolbar
         tree={tree}
@@ -474,12 +601,14 @@ export function TreeWorkspace({
         hasHighlights={highlightedPersonIds.size > 0 || highlightedEdgeIds.size > 0}
         backend={backend}
         isCompact={isCompact}
+        isReadOnly={isReadOnly}
         hasCustomSiblingOrder={
           Object.keys(siblingOrder).length > 0 || Object.keys(spouseOrder).length > 0
         }
         referencePerson={currentRefPerson}
         onOpenReferenceSelector={() => setIsReferenceModalOpen(true)}
         onResetSiblingOrder={() => {
+          if (isReadOnly) return;
           resetSiblingOrder(tree.id);
           resetSpouseOrder(tree.id);
           setSiblingOrder({});
@@ -495,6 +624,7 @@ export function TreeWorkspace({
         }}
         onOpenTimeline={() => setIsTimelineOpen(true)}
         onOpenExportImport={() => setIsExportImportOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
         onDeleteTree={() => setIsDeleteTreeModalOpen(true)}
       />
 
@@ -524,8 +654,9 @@ export function TreeWorkspace({
           relationships={relationships}
           selectedPerson={selectedPerson}
           referencePersonConfig={referenceConfig}
+          isReadOnly={isReadOnly}
           onSelectPerson={handleSelectPerson}
-          onAddPerson={handleOpenAddPerson}
+          onAddPerson={isReadOnly ? () => {} : handleOpenAddPerson}
           isOpen={isSidebarOpen}
           onToggle={() => setManualSidebarState(!isSidebarOpen)}
         />
@@ -543,11 +674,12 @@ export function TreeWorkspace({
             spouseOrder={spouseOrder}
             referencePersonConfig={referenceConfig}
             isCompact={isCompact}
-            onUpdateSiblingOrder={setSiblingOrder}
-            onUpdateSpouseOrder={setSpouseOrder}
+            isReadOnly={isReadOnly}
+            onUpdateSiblingOrder={isReadOnly ? undefined : setSiblingOrder}
+            onUpdateSpouseOrder={isReadOnly ? undefined : setSpouseOrder}
             onSelectPerson={handleSelectPerson}
             onFindRelationship={handleOpenFinderWithPerson}
-            onAddPerson={handleOpenAddPerson}
+            onAddPerson={isReadOnly ? undefined : handleOpenAddPerson}
             onOpenExportImport={() => setIsExportImportOpen(true)}
           />
         </main>
@@ -561,19 +693,20 @@ export function TreeWorkspace({
             allPeople={people}
             existingRelationships={relationships}
             referencePersonId={currentRefPerson?.id}
-            onSetReferencePerson={handleSetReferencePerson}
+            isReadOnly={isReadOnly}
+            onSetReferencePerson={isReadOnly ? undefined : handleSetReferencePerson}
             onClose={() => {
               setIsDetailsOpen(false);
               setSelectedPerson(null);
             }}
-            onEdit={handleOpenEditPerson}
-            onDeletePerson={handleDeletePerson}
+            onEdit={isReadOnly ? () => {} : handleOpenEditPerson}
+            onDeletePerson={isReadOnly ? () => {} : handleDeletePerson}
             onFindRelationship={handleOpenFinderWithPerson}
             onSelectRelative={handleSelectPerson}
             onHighlightAncestors={handleHighlightAncestors}
             onHighlightDescendants={handleHighlightDescendants}
-            onAddRelationship={handleSaveRelationship}
-            onRemoveRelationship={handleRemoveRelationship}
+            onAddRelationship={isReadOnly ? () => {} : handleSaveRelationship}
+            onRemoveRelationship={isReadOnly ? () => {} : handleRemoveRelationship}
           />
         )}
       </div>
@@ -656,6 +789,85 @@ export function TreeWorkspace({
               <Trash2 className="h-4 w-4" />
               Delete Permanently
             </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Share Family Tree Modal */}
+      <ShareTreeModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        tree={tree}
+      />
+
+      {/* Editor Duplicate Invitation Dialog */}
+      <Dialog
+        isOpen={shareRole === "editor" && !isOwner && !editorPromptDismissed}
+        onClose={() => setEditorPromptDismissed(true)}
+        title={user ? "Copy Tree to Your Profile" : "Editor Invitation: Sign In Required"}
+        description={
+          user
+            ? `You have been invited to edit "${tree.name}". To make edits without altering the original curator's tree, a personal copy will be placed into your profile.`
+            : `You have been invited to edit "${tree.name}". Please sign in or create an account so a personal copy of this tree can be saved to your profile for editing.`
+        }
+        maxWidth="md"
+      >
+        <div className="space-y-4 pt-2">
+          <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-stone-50/70 dark:bg-[#18201B] p-4 text-xs space-y-2">
+            <div className="flex justify-between">
+              <span className="text-stone-500 dark:text-stone-400">Family Tree:</span>
+              <span className="font-semibold text-stone-900 dark:text-stone-100">{tree.name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-stone-500 dark:text-stone-400">Total Members:</span>
+              <span className="font-medium text-stone-900 dark:text-stone-100">{people.length} people</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-stone-500 dark:text-stone-400">Generations:</span>
+              <span className="font-medium text-stone-900 dark:text-stone-100">{generationCount} generations</span>
+            </div>
+            {currentRefPerson && (
+              <div className="flex justify-between">
+                <span className="text-stone-500 dark:text-stone-400">Reference Anchor:</span>
+                <span className="font-medium text-stone-900 dark:text-stone-100">{getPersonFullName(currentRefPerson)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-stone-100 dark:border-stone-800">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditorPromptDismissed(true)}
+            >
+              View Read-Only Instead
+            </Button>
+            {user ? (
+              <Button
+                type="button"
+                onClick={handleDuplicateTree}
+                disabled={isCloningTree}
+                className="bg-emerald-800 hover:bg-emerald-900 text-white gap-1.5"
+              >
+                <GitFork className="h-4 w-4" />
+                {isCloningTree ? "Copying Tree..." : "Copy Tree & Start Editing"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => {
+                  const returnUrl =
+                    typeof window !== "undefined"
+                      ? window.location.pathname + window.location.search
+                      : `/trees/${tree.id}?share=editor`;
+                  router.push(`/login?next=${encodeURIComponent(returnUrl)}`);
+                }}
+                className="bg-emerald-800 hover:bg-emerald-900 text-white gap-1.5"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign In to Edit
+              </Button>
+            )}
           </div>
         </div>
       </Dialog>

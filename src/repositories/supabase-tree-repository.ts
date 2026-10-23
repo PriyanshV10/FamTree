@@ -108,6 +108,25 @@ export class SupabaseTreeRepository implements ITreeRepository {
   constructor(private client: SupabaseClient<Database>) {}
 
   /**
+   * Ensures that a user profile exists in the public.profiles table.
+   * Satisfies foreign key constraints (family_trees_owner_id_fkey, family_tree_members_user_id_fkey).
+   */
+  private async ensureProfileExists(userId: string, fullName?: string): Promise<void> {
+    try {
+      await this.client.from("profiles").upsert(
+        {
+          id: userId,
+          full_name: fullName || "Tree Curator",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+    } catch (err) {
+      console.warn("Could not ensure user profile in database:", err);
+    }
+  }
+
+  /**
    * Automatically bootstraps demo tree entities into Supabase if missing.
    * Resolves foreign key errors when users point .env.local to an empty database.
    */
@@ -205,26 +224,28 @@ export class SupabaseTreeRepository implements ITreeRepository {
         return currentUserId !== null && tree.owner_id === currentUserId;
       }
 
-      // 2. If tree has NO owner_id (legacy / unassigned / starter trees):
+      // 2. Default starter trees are viewable by everyone
       if (tree.is_default) {
         return true;
       }
 
-      // If user is logged in:
+      // 3. If user is logged in:
       if (currentUserId) {
         const treeOwnerLower = (tree.owner_name || "").toLowerCase();
         // If owner_name matches current user email or name, claim it
         if (currentUserEmailPrefix && treeOwnerLower.includes(currentUserEmailPrefix)) {
-          this.client
-            .from("family_trees")
-            .update({ owner_id: currentUserId })
-            .eq("id", tree.id)
-            .then(() => {});
+          this.ensureProfileExists(currentUserId, tree.owner_name).then(() => {
+            this.client
+              .from("family_trees")
+              .update({ owner_id: currentUserId })
+              .eq("id", tree.id)
+              .then(() => {});
+          });
           tree.owner_id = currentUserId;
           return true;
         }
 
-        // Generic unassigned trees created locally
+        // Generic unassigned trees created locally during offline session
         if (
           !tree.owner_name ||
           tree.owner_name === "Tree Curator" ||
@@ -237,8 +258,9 @@ export class SupabaseTreeRepository implements ITreeRepository {
         return false;
       }
 
-      // If not logged in, allow viewing unowned trees
-      return true;
+      // 4. If NOT logged in: NEVER show unowned user trees on the dashboard!
+      // Only default starter demo trees (handled above in #2) are visible to guests.
+      return false;
     });
 
     if (filteredTrees.length === 0) return [];
@@ -297,7 +319,7 @@ export class SupabaseTreeRepository implements ITreeRepository {
 
     if (!tree) return null;
 
-    // Check ownership: If owned by another user and current user is not a member, deny access
+    // Check ownership: If owned by another user and current user is not a member, deny access unless public
     if (tree.owner_id && currentUserId && tree.owner_id !== currentUserId) {
       const { data: membership } = await this.client
         .from("family_tree_members")
@@ -306,22 +328,24 @@ export class SupabaseTreeRepository implements ITreeRepository {
         .eq("user_id", currentUserId)
         .maybeSingle();
 
-      if (!membership) {
+      if (!membership && tree.is_private) {
         return null;
       }
     } else if (tree.owner_id && !currentUserId && !tree.is_default) {
-      return null;
+      if (tree.is_private) {
+        return null;
+      }
     }
 
     // Auto-claim unowned tree if created by this user
     if (!tree.owner_id && currentUserId && !tree.is_default) {
       const treeOwnerLower = (tree.owner_name || "").toLowerCase();
       if (!currentUserEmailPrefix || treeOwnerLower.includes(currentUserEmailPrefix)) {
-        this.client
+        await this.ensureProfileExists(currentUserId, tree.owner_name);
+        await this.client
           .from("family_trees")
           .update({ owner_id: currentUserId })
-          .eq("id", id)
-          .then(() => {});
+          .eq("id", id);
         tree.owner_id = currentUserId;
       }
     }
@@ -339,6 +363,7 @@ export class SupabaseTreeRepository implements ITreeRepository {
     name: string;
     description?: string;
     ownerName?: string;
+    ownerId?: string;
     coverColor?: string;
   }): Promise<FamilyTree> {
     let currentUserId: string | null = null;
@@ -349,6 +374,12 @@ export class SupabaseTreeRepository implements ITreeRepository {
       // Unauthenticated
     }
 
+    const effectiveOwnerId = input.ownerId || currentUserId;
+    if (effectiveOwnerId) {
+      // Crucial: ensure profile row exists to prevent foreign key violations (family_trees_owner_id_fkey)
+      await this.ensureProfileExists(effectiveOwnerId, input.ownerName);
+    }
+
     const treeId = input.id || createId("tree");
     const now = getCurrentTimestamp();
 
@@ -356,7 +387,7 @@ export class SupabaseTreeRepository implements ITreeRepository {
       id: treeId,
       name: input.name,
       description: input.description || "",
-      owner_id: currentUserId,
+      owner_id: effectiveOwnerId,
       owner_name: input.ownerName || "Tree Curator",
       cover_color: input.coverColor || "bg-emerald-800",
       created_at: now,
@@ -373,18 +404,18 @@ export class SupabaseTreeRepository implements ITreeRepository {
       throw new RepositoryError(`Failed to create tree: ${error.message}`, error.code, error);
     }
 
-    if (currentUserId) {
+    if (effectiveOwnerId) {
       try {
         await this.client.from("family_tree_members").upsert(
           {
             tree_id: treeId,
-            user_id: currentUserId,
+            user_id: effectiveOwnerId,
             role: "owner",
           },
           { onConflict: "tree_id,user_id" }
         );
       } catch {
-        // Optional
+        // Members table tracking is optional
       }
     }
 
@@ -472,35 +503,46 @@ export class SupabaseTreeRepository implements ITreeRepository {
         .eq("user_id", currentUserId)
         .maybeSingle();
 
-      if (!member) {
+      if (!member && (treeRow as { is_private?: boolean }).is_private) {
         return null;
       }
     } else if (treeRow.owner_id && !currentUserId && !treeRow.is_default) {
-      return null;
+      if ((treeRow as { is_private?: boolean }).is_private) {
+        return null;
+      }
     }
 
     // Auto-claim unowned tree if created by this user
     if (!treeRow.owner_id && currentUserId && !treeRow.is_default) {
       const treeOwnerLower = (treeRow.owner_name || "").toLowerCase();
       if (!currentUserEmailPrefix || treeOwnerLower.includes(currentUserEmailPrefix)) {
-        this.client
+        await this.ensureProfileExists(currentUserId, treeRow.owner_name);
+        await this.client
           .from("family_trees")
           .update({ owner_id: currentUserId })
-          .eq("id", treeId)
-          .then(() => {});
+          .eq("id", treeId);
         treeRow.owner_id = currentUserId;
       }
     }
 
+    let people = (peopleResult.data || []).map(mapDbPersonToDomain);
+    let relationships = (relsResult.data || []).map(mapDbRelToDomain);
+
     if (peopleResult.error) {
-      throw new RepositoryError(`Failed to load people: ${peopleResult.error.message}`, peopleResult.error.code, peopleResult.error);
+      console.warn(`Warning loading people for tree '${treeId}':`, peopleResult.error.message);
+      const demoPeople = DEMO_PEOPLE.filter((p) => p.treeId === treeId);
+      if (demoPeople.length > 0) {
+        people = demoPeople;
+      }
     }
     if (relsResult.error) {
-      throw new RepositoryError(`Failed to load relationships: ${relsResult.error.message}`, relsResult.error.code, relsResult.error);
+      console.warn(`Warning loading relationships for tree '${treeId}':`, relsResult.error.message);
+      const demoRels = DEMO_RELATIONSHIPS.filter((r) => r.treeId === treeId);
+      if (demoRels.length > 0) {
+        relationships = demoRels;
+      }
     }
 
-    const people = (peopleResult.data || []).map(mapDbPersonToDomain);
-    const relationships = (relsResult.data || []).map(mapDbRelToDomain);
     const tree = mapDbTreeToDomain(treeResult.data, people.length);
 
     return {

@@ -100,6 +100,7 @@ export class LocalTreeRepository implements ITreeRepository {
     name: string;
     description?: string;
     ownerName?: string;
+    ownerId?: string;
     coverColor?: string;
   }): Promise<FamilyTree> {
     const now = getCurrentTimestamp();
@@ -108,6 +109,7 @@ export class LocalTreeRepository implements ITreeRepository {
       name: input.name,
       description: input.description || "",
       ownerName: input.ownerName || "Tree Curator",
+      ownerId: input.ownerId,
       coverColor: input.coverColor || "bg-emerald-800",
       createdAt: now,
       updatedAt: now,

@@ -42,6 +42,7 @@ interface TreeCanvasProps {
   spouseOrder?: Record<string, string[]>;
   referencePersonConfig?: ReferencePersonConfig | null;
   isCompact?: boolean;
+  isReadOnly?: boolean;
   onUpdateSiblingOrder?: (order: Record<string, string[]>) => void;
   onUpdateSpouseOrder?: (order: Record<string, string[]>) => void;
   onSelectPerson: (person: Person | null) => void;
@@ -70,6 +71,7 @@ export function TreeCanvas({
   spouseOrder,
   referencePersonConfig,
   isCompact = false,
+  isReadOnly = false,
   onUpdateSiblingOrder,
   onUpdateSpouseOrder,
   onSelectPerson,
@@ -104,10 +106,11 @@ export function TreeCanvas({
 
   const handleSwapSpouses = useCallback(
     (spouse1Id: string, spouse2Id: string) => {
+      if (isReadOnly) return;
       const updated = swapSpousesInOrder(treeId || "default", spouse1Id, spouse2Id, spouseOrder);
       onUpdateSpouseOrder?.(updated);
     },
-    [treeId, spouseOrder, onUpdateSpouseOrder]
+    [isReadOnly, treeId, spouseOrder, onUpdateSpouseOrder]
   );
 
   // Compute layout using deterministic generational engine
@@ -248,7 +251,7 @@ export function TreeCanvas({
 
   const handleNodeDragStart: OnNodeDrag<Node> = useCallback(
     (_, node) => {
-      if (node.type !== "personNode") return;
+      if (isReadOnly || node.type !== "personNode") return;
 
       setHoveredPersonId(null);
       const subtreeNodeIds = getSubtreeNodeIds(node.id, relationships, nodes);
@@ -267,7 +270,7 @@ export function TreeCanvas({
         currentDx: 0,
       };
     },
-    [nodes, people, relationships, setHoveredPersonId]
+    [isReadOnly, nodes, people, relationships, setHoveredPersonId]
   );
 
   const handleNodeDrag: OnNodeDrag<Node> = useCallback(
@@ -658,6 +661,7 @@ export function TreeCanvas({
       <ReactFlow
         nodes={displayNodes}
         edges={displayEdges}
+        nodesDraggable={!isReadOnly}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStart={handleNodeDragStart}
@@ -706,25 +710,29 @@ export function TreeCanvas({
               <Sparkles className="h-7 w-7 text-emerald-700 dark:text-emerald-400" />
             </div>
             <h3 className="font-serif text-lg font-bold text-stone-900 dark:text-stone-100">
-              Your Family Tree is Blank
+              {isReadOnly ? "Family Tree is Empty" : "Your Family Tree is Blank"}
             </h3>
             <p className="mt-2 text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
-              Start charting your ancestry by recording the first family member, or import an existing GEDCOM / JSON archive.
+              {isReadOnly
+                ? "This tree does not have any recorded family members yet."
+                : "Start charting your ancestry by recording the first family member, or import an existing GEDCOM / JSON archive."}
             </p>
-            <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2.5">
-              {onAddPerson && (
-                <Button onClick={onAddPerson} size="sm" className="w-full sm:w-auto gap-1.5 text-xs">
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Add First Person
-                </Button>
-              )}
-              {onOpenExportImport && (
-                <Button onClick={onOpenExportImport} variant="outline" size="sm" className="w-full sm:w-auto gap-1.5 text-xs">
-                  <DownloadCloud className="h-3.5 w-3.5" />
-                  Import Data
-                </Button>
-              )}
-            </div>
+            {!isReadOnly && (
+              <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                {onAddPerson && (
+                  <Button onClick={onAddPerson} size="sm" className="w-full sm:w-auto gap-1.5 text-xs">
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Add First Person
+                  </Button>
+                )}
+                {onOpenExportImport && (
+                  <Button onClick={onOpenExportImport} variant="outline" size="sm" className="w-full sm:w-auto gap-1.5 text-xs">
+                    <DownloadCloud className="h-3.5 w-3.5" />
+                    Import Data
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

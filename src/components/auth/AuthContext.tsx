@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from("profiles")
         .select("id, full_name, avatar_url")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setProfile({
@@ -65,16 +65,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatarUrl: data.avatar_url ?? undefined,
         });
       } else {
+        const fallbackName = email?.split("@")[0] || "Curator";
+        // Proactively insert missing profile row into public.profiles to satisfy foreign keys
+        await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: userId,
+              full_name: fallbackName,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" }
+          );
+
         setProfile({
           id: userId,
-          fullName: email?.split("@")[0] || "Curator",
+          fullName: fallbackName,
           email,
         });
       }
     } catch {
+      const fallbackName = email?.split("@")[0] || "Curator";
+      try {
+        await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: userId,
+              full_name: fallbackName,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" }
+          );
+      } catch {
+        // Ignore failure
+      }
+
       setProfile({
         id: userId,
-        fullName: email?.split("@")[0] || "Curator",
+        fullName: fallbackName,
         email,
       });
     }
@@ -180,6 +209,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       return { error: error.message };
+    }
+
+    if (data.user) {
+      try {
+        await supabase.from("profiles").upsert(
+          {
+            id: data.user.id,
+            full_name: fullName,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
+      } catch {
+        // Continue even if profile table RLS or triggers handle it
+      }
     }
 
     if (data.user && data.session) {

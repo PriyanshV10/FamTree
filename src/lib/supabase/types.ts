@@ -52,6 +52,7 @@ export interface Database {
           owner_name: string;
           cover_color: string | null;
           is_default: boolean;
+          is_private?: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -63,6 +64,7 @@ export interface Database {
           owner_name?: string;
           cover_color?: string | null;
           is_default?: boolean;
+          is_private?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -74,6 +76,7 @@ export interface Database {
           owner_name?: string;
           cover_color?: string | null;
           is_default?: boolean;
+          is_private?: boolean;
           created_at?: string;
           updated_at?: string;
         };

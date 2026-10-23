@@ -46,6 +46,7 @@ export interface ITreeRepository {
     name: string;
     description?: string;
     ownerName?: string;
+    ownerId?: string;
     coverColor?: string;
   }): Promise<FamilyTree>;
 

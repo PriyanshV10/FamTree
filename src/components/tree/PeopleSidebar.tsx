@@ -13,6 +13,7 @@ interface PeopleSidebarProps {
   relationships?: Relationship[];
   selectedPerson: Person | null;
   referencePersonConfig?: ReferencePersonConfig | null;
+  isReadOnly?: boolean;
   onSelectPerson: (person: Person) => void;
   onAddPerson: () => void;
   isOpen: boolean;
@@ -24,6 +25,7 @@ export function PeopleSidebar({
   relationships = [],
   selectedPerson,
   referencePersonConfig,
+  isReadOnly = false,
   onSelectPerson,
   onAddPerson,
   isOpen,
@@ -111,15 +113,17 @@ export function PeopleSidebar({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            onClick={onAddPerson}
-            className="h-8 gap-1 text-xs px-2.5"
-            title="Add Person"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Add
-          </Button>
+          {!isReadOnly && (
+            <Button
+              size="sm"
+              onClick={onAddPerson}
+              className="h-8 gap-1 text-xs px-2.5"
+              title="Add Person"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Add
+            </Button>
+          )}
           <button
             onClick={onToggle}
             className="md:hidden rounded-lg p-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800"

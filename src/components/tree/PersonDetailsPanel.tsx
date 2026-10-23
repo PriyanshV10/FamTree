@@ -41,6 +41,7 @@ interface PersonDetailsPanelProps {
   allPeople: Person[];
   existingRelationships: Relationship[];
   referencePersonId?: string;
+  isReadOnly?: boolean;
   onSetReferencePerson?: (person: Person) => void;
   onClose: () => void;
   onEdit: (person: Person) => void;
@@ -65,6 +66,8 @@ export function PersonDetailsPanel({
   graph,
   allPeople,
   existingRelationships,
+  referencePersonId,
+  isReadOnly = false,
   onClose,
   onEdit,
   onDeletePerson,
@@ -74,7 +77,6 @@ export function PersonDetailsPanel({
   onHighlightDescendants,
   onAddRelationship,
   onRemoveRelationship,
-  referencePersonId,
   onSetReferencePerson,
 }: PersonDetailsPanelProps) {
   const [confirmDeletePerson, setConfirmDeletePerson] = useState(false);
@@ -152,7 +154,7 @@ export function PersonDetailsPanel({
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className={cn("gap-2", isReadOnly ? "flex" : "grid grid-cols-2")}>
           <Button
             variant="outline"
             size="sm"
@@ -162,15 +164,17 @@ export function PersonDetailsPanel({
             <GitCompare className="h-3.5 w-3.5 text-emerald-700" />
             Find Relation
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEdit(person)}
-            className="w-full gap-1.5 text-xs"
-          >
-            <Edit3 className="h-3.5 w-3.5 text-stone-600" />
-            Edit Profile
-          </Button>
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(person)}
+              className="w-full gap-1.5 text-xs"
+            >
+              <Edit3 className="h-3.5 w-3.5 text-stone-600" />
+              Edit Profile
+            </Button>
+          )}
         </div>
 
         {/* Generational Lineage Actions */}
@@ -210,7 +214,7 @@ export function PersonDetailsPanel({
                   </span>
                 </div>
               </div>
-            ) : (
+            ) : !isReadOnly ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -221,7 +225,7 @@ export function PersonDetailsPanel({
                 <Target className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
                 Set as Reference Person
               </Button>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -278,14 +282,16 @@ export function PersonDetailsPanel({
           <div className="space-y-1">
             <div className="flex items-center justify-between pb-0.5">
               <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Parents</p>
-              <button
-                type="button"
-                onClick={() => setAddRelativeMode("parent")}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 hover:underline transition-colors"
-                title={`Add parent for ${fullName}`}
-              >
-                <Plus className="h-3 w-3" /> Add Parent
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setAddRelativeMode("parent")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 hover:underline transition-colors"
+                  title={`Add parent for ${fullName}`}
+                >
+                  <Plus className="h-3 w-3" /> Add Parent
+                </button>
+              )}
             </div>
             {parents.length === 0 ? (
               <p className="text-xs text-stone-400 italic">None recorded</p>
@@ -302,11 +308,14 @@ export function PersonDetailsPanel({
                       : "Parent"
                   }
                   onSelect={onSelectRelative}
-                  onDisconnect={() =>
-                    setRelToDelete({
-                      id: r.id,
-                      targetName: getPersonFullName(p),
-                    })
+                  onDisconnect={
+                    isReadOnly
+                      ? undefined
+                      : () =>
+                          setRelToDelete({
+                            id: r.id,
+                            targetName: getPersonFullName(p),
+                          })
                   }
                 />
               ))
@@ -317,14 +326,16 @@ export function PersonDetailsPanel({
           <div className="space-y-1">
             <div className="flex items-center justify-between pb-0.5">
               <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Spouse / Partner</p>
-              <button
-                type="button"
-                onClick={() => setAddRelativeMode("spouse")}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 hover:underline transition-colors"
-                title={`Add partner for ${fullName}`}
-              >
-                <Plus className="h-3 w-3" /> Add Partner
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setAddRelativeMode("spouse")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 hover:underline transition-colors"
+                  title={`Add partner for ${fullName}`}
+                >
+                  <Plus className="h-3 w-3" /> Add Partner
+                </button>
+              )}
             </div>
             {spouses.length === 0 ? (
               <p className="text-xs text-stone-400 italic">None recorded</p>
@@ -339,11 +350,14 @@ export function PersonDetailsPanel({
                       : `Partner${r.startDate ? ` (m. ${r.startDate})` : ""}`
                   }
                   onSelect={onSelectRelative}
-                  onDisconnect={() =>
-                    setRelToDelete({
-                      id: r.id,
-                      targetName: getPersonFullName(p),
-                    })
+                  onDisconnect={
+                    isReadOnly
+                      ? undefined
+                      : () =>
+                          setRelToDelete({
+                            id: r.id,
+                            targetName: getPersonFullName(p),
+                          })
                   }
                 />
               ))
@@ -371,14 +385,16 @@ export function PersonDetailsPanel({
           <div className="space-y-1">
             <div className="flex items-center justify-between pb-0.5">
               <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Children</p>
-              <button
-                type="button"
-                onClick={() => setAddRelativeMode("child")}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 hover:underline transition-colors"
-                title={`Add child for ${fullName}`}
-              >
-                <Plus className="h-3 w-3" /> Add Child
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setAddRelativeMode("child")}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 hover:text-emerald-950 hover:underline transition-colors"
+                  title={`Add child for ${fullName}`}
+                >
+                  <Plus className="h-3 w-3" /> Add Child
+                </button>
+              )}
             </div>
             {children.length === 0 ? (
               <p className="text-xs text-stone-400 italic">None recorded</p>
@@ -395,11 +411,14 @@ export function PersonDetailsPanel({
                       : "Child"
                   }
                   onSelect={onSelectRelative}
-                  onDisconnect={() =>
-                    setRelToDelete({
-                      id: r.id,
-                      targetName: getPersonFullName(p),
-                    })
+                  onDisconnect={
+                    isReadOnly
+                      ? undefined
+                      : () =>
+                          setRelToDelete({
+                            id: r.id,
+                            targetName: getPersonFullName(p),
+                          })
                   }
                 />
               ))
@@ -408,17 +427,19 @@ export function PersonDetailsPanel({
         </div>
 
         {/* Delete Person Action */}
-        <div className="pt-2 border-t border-stone-100">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirmDeletePerson(true)}
-            className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 gap-1.5 text-xs"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete Person from Tree
-          </Button>
-        </div>
+        {!isReadOnly && (
+          <div className="pt-2 border-t border-stone-100">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDeletePerson(true)}
+              className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 gap-1.5 text-xs"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete Person from Tree
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Footer link to Profile Page */}

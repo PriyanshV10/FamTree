@@ -46,6 +46,20 @@ export async function syncLocalAndSupabase(
     return true;
   });
 
+  if (treesToSync.length > 0) {
+    try {
+      await client.from("profiles").upsert(
+        {
+          id: userId,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id", ignoreDuplicates: true }
+      );
+    } catch {
+      // Ignore if exists
+    }
+  }
+
   for (const tree of treesToSync) {
     try {
       // Upsert tree in Supabase

@@ -16,6 +16,8 @@ import {
   Trash2,
   RotateCcw,
   Target,
+  Share2,
+  Eye,
 } from "lucide-react";
 import { FamilyTree, Person } from "@/types";
 import { getPersonFullName } from "@/lib/utils";
@@ -30,6 +32,8 @@ interface TreeToolbarProps {
   isCompact?: boolean;
   hasCustomSiblingOrder?: boolean;
   referencePerson?: Person | null;
+  isReadOnly?: boolean;
+  onOpenShareModal?: () => void;
   onOpenReferenceSelector?: () => void;
   onResetSiblingOrder?: () => void;
   onClearHighlights?: () => void;
@@ -52,6 +56,8 @@ export function TreeToolbar({
   isCompact = false,
   hasCustomSiblingOrder = false,
   referencePerson,
+  isReadOnly = false,
+  onOpenShareModal,
   onOpenReferenceSelector,
   onResetSiblingOrder,
   onClearHighlights,
@@ -84,9 +90,16 @@ export function TreeToolbar({
             <h1 className="text-base font-serif font-bold text-stone-900 dark:text-stone-100">
               {tree.name}
             </h1>
-            <span className="hidden md:inline-flex rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              Active Tree
-            </span>
+            {isReadOnly ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                <Eye className="h-3 w-3" />
+                Read-Only Viewer
+              </span>
+            ) : (
+              <span className="hidden md:inline-flex rounded-full bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                Active Tree
+              </span>
+            )}
             <span
               className={`hidden lg:inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
                 backend === "supabase"
@@ -207,6 +220,19 @@ export function TreeToolbar({
           </Button>
         )}
 
+        {onOpenShareModal && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onOpenShareModal}
+            className="h-8 gap-1.5 text-xs text-stone-700 dark:text-stone-300 hover:text-emerald-900 dark:hover:text-emerald-300 hover:border-emerald-300 dark:hover:border-emerald-700"
+            title="Share this family tree (Viewer & Editor links)"
+          >
+            <Share2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+            <span className="hidden sm:inline">Share</span>
+          </Button>
+        )}
+
         {onOpenExportImport && (
           <Button
             variant="outline"
@@ -220,7 +246,7 @@ export function TreeToolbar({
           </Button>
         )}
 
-        {onAddRelationship && (
+        {!isReadOnly && onAddRelationship && (
           <Button
             variant="outline"
             size="sm"
@@ -232,16 +258,18 @@ export function TreeToolbar({
           </Button>
         )}
 
-        <Button
-          size="sm"
-          onClick={onAddPerson}
-          className="h-8 gap-1.5 text-xs shadow-xs"
-        >
-          <UserPlus className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Add Person</span>
-        </Button>
+        {!isReadOnly && (
+          <Button
+            size="sm"
+            onClick={onAddPerson}
+            className="h-8 gap-1.5 text-xs shadow-xs"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Add Person</span>
+          </Button>
+        )}
 
-        {onDeleteTree && (
+        {!isReadOnly && onDeleteTree && (
           <Button
             variant="ghost"
             size="sm"
