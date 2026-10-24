@@ -1,4 +1,5 @@
 import React from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -15,6 +16,8 @@ import { SupabaseTreeRepository } from "@/repositories/supabase-tree-repository"
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { FamilyTree, Person, Relationship } from "@/types";
+
+export const instant = false;
 
 export function generateStaticParams() {
   return DEMO_PEOPLE.map((person) => ({
@@ -46,6 +49,7 @@ export default async function PersonProfilePage({
     people = getDemoPeople(demoTree.id);
     relationships = getDemoRelationships(demoTree.id);
   } else {
+    await connection();
     try {
       if (isSupabaseConfigured()) {
         const serverClient = await getSupabaseServerClient();

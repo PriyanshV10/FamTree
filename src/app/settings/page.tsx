@@ -30,7 +30,7 @@ import {
   MaidenNameConvention,
   DefaultViewMode,
 } from "@/lib/preferences";
-import { getTreeRepository } from "@/repositories";
+import { getTreeRepository, getRepositoryBackend } from "@/repositories";
 import { getCurrentTimestamp } from "@/lib/utils";
 
 function CuratorProfileSection({
@@ -142,7 +142,7 @@ export default function SettingsPage() {
     setIsExporting(true);
     setExportMessage(null);
     try {
-      const repo = getTreeRepository();
+      const repo = getTreeRepository(Boolean(user));
       const trees = await repo.listTrees();
 
       const allData: {
@@ -155,7 +155,7 @@ export default function SettingsPage() {
         version: "1.0.0",
         generator: "FamTree Ancestry Engine",
         exportedAt: getCurrentTimestamp(),
-        backend: isConfigured ? "supabase" : "local",
+        backend: getRepositoryBackend(Boolean(user)),
         trees: [],
       };
 

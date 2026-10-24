@@ -1,4 +1,5 @@
 import React from "react";
+import { connection } from "next/server";
 import { TreeWorkspace } from "@/components/tree/TreeWorkspace";
 import { getDemoTree, getDemoPeople, getDemoRelationships, DEMO_TREES } from "@/data/demo-data";
 import { getTreeRepository } from "@/repositories";
@@ -6,6 +7,8 @@ import { SupabaseTreeRepository } from "@/repositories/supabase-tree-repository"
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { FamilyTree, Person, Relationship } from "@/types";
+
+export const instant = false;
 
 export function generateStaticParams() {
   return DEMO_TREES.map((tree) => ({
@@ -32,6 +35,9 @@ export default async function TreePage({ params }: TreePageProps) {
     initialPeople = getDemoPeople(demoTree.id);
     initialRelationships = getDemoRelationships(demoTree.id);
   } else {
+    // Non-demo trees are dynamic and must be rendered at request time
+    await connection();
+
     try {
       if (isSupabaseConfigured()) {
         const serverClient = await getSupabaseServerClient();
@@ -68,8 +74,8 @@ export default async function TreePage({ params }: TreePageProps) {
       ownerName: "Curator",
       coverColor: "bg-emerald-800",
       isDefault: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: "1970-01-01T00:00:00.000Z",
+      updatedAt: "1970-01-01T00:00:00.000Z",
     };
   }
 

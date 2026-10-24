@@ -30,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AddRelativeModal, AddRelativeMode } from "@/components/relationship/AddRelativeModal";
 import { getTreeRepository } from "@/repositories";
+import { useAuth } from "@/components/auth/AuthContext";
 
 interface PersonProfileClientProps {
   tree: FamilyTree;
@@ -44,6 +45,7 @@ export function PersonProfileClient({
   initialPeople,
   initialRelationships,
 }: PersonProfileClientProps) {
+  const { user } = useAuth();
   const [people, setPeople] = useState<Person[]>(initialPeople);
   const [relationships, setRelationships] = useState<Relationship[]>(initialRelationships);
   const [addRelativeMode, setAddRelativeMode] = useState<AddRelativeMode | null>(null);
@@ -55,7 +57,7 @@ export function PersonProfileClient({
     let isMounted = true;
     async function loadFromRepo() {
       try {
-        const repo = getTreeRepository();
+        const repo = getTreeRepository(Boolean(user));
         const data = await repo.getTreeGraph(tree.id);
         if (isMounted && data) {
           if (data.people.length > 0) setPeople(data.people);
@@ -69,7 +71,7 @@ export function PersonProfileClient({
     return () => {
       isMounted = false;
     };
-  }, [tree.id]);
+  }, [tree.id, user]);
 
   // Current person object from latest people state
   const person = useMemo(() => {
@@ -100,7 +102,7 @@ export function PersonProfileClient({
     notes?: string;
   }) => {
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     try {
       const newRel = graph.addRelationship({
         treeId: tree.id,
@@ -123,7 +125,7 @@ export function PersonProfileClient({
   const handleDisconnectRelationship = async () => {
     if (!relToDelete) return;
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     try {
       await repo.removeRelationship(tree.id, relToDelete.id);
       graph.removeRelationship(relToDelete.id);

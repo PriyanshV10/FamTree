@@ -28,7 +28,7 @@ export async function duplicateTreeToAccount({
   ownerName,
   customTreeName,
 }: DuplicateTreeOptions): Promise<FamilyTree> {
-  const repo = getTreeRepository();
+  const repo = getTreeRepository(Boolean(ownerId));
 
   const newTreeName = customTreeName || `${tree.name} (Copy)`;
   const newTree = await repo.createTree({

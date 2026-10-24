@@ -31,6 +31,7 @@ import {
 import {
   ReferencePersonConfig,
   getReferencePersonConfig,
+  getDefaultReferencePersonConfig,
   saveReferencePersonConfig,
   resetReferencePersonConfig,
 } from "@/lib/reference-person";
@@ -59,23 +60,26 @@ export function TreeWorkspace({
   const [tree, setTree] = useState<FamilyTree>(initialTree);
   const [people, setPeople] = useState<Person[]>(initialPeople);
   const [relationships, setRelationships] = useState<Relationship[]>(initialRelationships);
-  const [backend] = useState<"supabase" | "local">(() => getRepositoryBackend());
+  const backend = getRepositoryBackend(Boolean(user));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDeleteTreeModalOpen, setIsDeleteTreeModalOpen] = useState(false);
   const [isDeletingTree, setIsDeletingTree] = useState(false);
 
   // Share States & Access Control
-  const [shareRole] = useState<"viewer" | "editor" | null>(() => {
-    if (initialShareRole) return initialShareRole;
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const s = params.get("share");
-      if (s === "viewer" || s === "editor") {
-        return s;
-      }
-    }
-    return null;
-  });
+  const searchRole = useSyncExternalStore(
+    (callback) => {
+      window.addEventListener("popstate", callback);
+      return () => window.removeEventListener("popstate", callback);
+    },
+    () => {
+      if (typeof window === "undefined") return null;
+      const s = new URLSearchParams(window.location.search).get("share");
+      return s === "viewer" || s === "editor" ? s : null;
+    },
+    () => null
+  );
+  const shareRole = initialShareRole ?? searchRole;
+
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCloningTree, setIsCloningTree] = useState(false);
   const [editorPromptDismissed, setEditorPromptDismissed] = useState(false);
@@ -121,7 +125,7 @@ export function TreeWorkspace({
   // Sync latest persisted data from repository on mount
   useEffect(() => {
     let isMounted = true;
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     repo.getTreeGraph(initialTree.id)
       .then((data) => {
         if (!isMounted || !data) return;
@@ -135,7 +139,7 @@ export function TreeWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [initialTree.id]);
+  }, [initialTree.id, user]);
 
   // Maintain active FamilyGraph instance backed by domain engine
   const graph = useMemo(
@@ -143,28 +147,53 @@ export function TreeWorkspace({
     [tree.id, people, relationships]
   );
 
-  // Persistent sibling order (loaded from localStorage by tree ID)
+  // Track client-side hydration mount state safely without cascading setState renders
+  const isMounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+
+  // Persistent sibling order (loaded from localStorage on client after mount)
   const [currentTreeId, setCurrentTreeId] = useState(initialTree.id);
-  const [siblingOrder, setSiblingOrder] = useState<TreeSiblingOrder>(() =>
-    getSiblingOrder(initialTree.id)
-  );
-
-  // Persistent spouse order (loaded from localStorage by tree ID)
-  const [spouseOrder, setSpouseOrder] = useState<TreeSpouseOrder>(() =>
-    getSpouseOrder(initialTree.id)
-  );
-
-  // Persistent reference person config (loaded from localStorage by tree ID)
+  const [siblingOrder, setSiblingOrder] = useState<TreeSiblingOrder>({});
+  const [spouseOrder, setSpouseOrder] = useState<TreeSpouseOrder>({});
   const [referenceConfig, setReferenceConfig] = useState<ReferencePersonConfig | null>(() =>
-    getReferencePersonConfig(initialTree.id, initialPeople)
+    getDefaultReferencePersonConfig(initialPeople)
   );
   const [isReferenceModalOpen, setIsReferenceModalOpen] = useState(false);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const storedRef = getReferencePersonConfig(tree.id, people);
+      if (storedRef) {
+        setReferenceConfig(storedRef);
+      }
+      setSiblingOrder(getSiblingOrder(tree.id));
+      setSpouseOrder(getSpouseOrder(tree.id));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [tree.id, people]);
+
+  // Compact mode toggle (synchronized with user preferences)
+  const isCompactPref = useSyncExternalStore(
+    (callback) => {
+      window.addEventListener("famtree:preferences-changed", callback);
+      return () => window.removeEventListener("famtree:preferences-changed", callback);
+    },
+    () => getPreferences().defaultViewMode === "compact",
+    () => false
+  );
+  const [compactManual, setCompactManual] = useState<boolean | null>(null);
+  const isCompact = compactManual !== null ? compactManual : isCompactPref;
+
   if (tree.id !== currentTreeId) {
     setCurrentTreeId(tree.id);
-    setSiblingOrder(getSiblingOrder(tree.id));
-    setSpouseOrder(getSpouseOrder(tree.id));
-    setReferenceConfig(getReferencePersonConfig(tree.id, people));
+    if (typeof window !== "undefined") {
+      setSiblingOrder(getSiblingOrder(tree.id));
+      setSpouseOrder(getSpouseOrder(tree.id));
+      setReferenceConfig(getReferencePersonConfig(tree.id, people));
+    }
   }
 
   // Determine active reference person
@@ -187,9 +216,6 @@ export function TreeWorkspace({
     }
     return Math.max(1, maxGen - minGen + 1);
   }, [people, relationships, referenceConfig]);
-
-  // Compact mode toggle (initialized from user preferences)
-  const [isCompact, setIsCompact] = useState(() => getPreferences().defaultViewMode === "compact");
 
   useEffect(() => {
     const handleSiblingOrderChange = () => {
@@ -220,14 +246,6 @@ export function TreeWorkspace({
       window.removeEventListener("famtree:reference-person-changed", handleRefChange);
     };
   }, [tree.id, people]);
-
-  useEffect(() => {
-    const handlePrefChange = () => {
-      setIsCompact(getPreferences().defaultViewMode === "compact");
-    };
-    window.addEventListener("famtree:preferences-changed", handlePrefChange);
-    return () => window.removeEventListener("famtree:preferences-changed", handlePrefChange);
-  }, []);
 
   // Track whether viewing on a desktop viewport (min-width: 768px)
   const isDesktop = useSyncExternalStore(
@@ -306,7 +324,7 @@ export function TreeWorkspace({
   const handleSavePerson = async (savedPerson: Person) => {
     if (isReadOnly) return;
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     const exists = people.some((p) => p.id === savedPerson.id);
 
     try {
@@ -332,7 +350,7 @@ export function TreeWorkspace({
   const handleDeletePerson = async (person: Person) => {
     if (isReadOnly) return;
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     try {
       await repo.removePerson(tree.id, person.id);
       graph.removePerson(person.id);
@@ -358,7 +376,7 @@ export function TreeWorkspace({
   }) => {
     if (isReadOnly) return;
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     try {
       const newRel = graph.addRelationship({
         treeId: tree.id,
@@ -383,7 +401,7 @@ export function TreeWorkspace({
   const handleRemoveRelationship = async (relId: string) => {
     if (isReadOnly) return;
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     try {
       await repo.removeRelationship(tree.id, relId);
       graph.removeRelationship(relId);
@@ -446,7 +464,7 @@ export function TreeWorkspace({
   ) => {
     if (isReadOnly) return;
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
 
     try {
       if (mode === "replace") {
@@ -499,7 +517,7 @@ export function TreeWorkspace({
     setIsDeletingTree(true);
     setErrorMessage(null);
     try {
-      const repo = getTreeRepository();
+      const repo = getTreeRepository(Boolean(user));
       await repo.deleteTree(tree.id);
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -603,9 +621,10 @@ export function TreeWorkspace({
         isCompact={isCompact}
         isReadOnly={isReadOnly}
         hasCustomSiblingOrder={
-          Object.keys(siblingOrder).length > 0 || Object.keys(spouseOrder).length > 0
+          isMounted &&
+          (Object.keys(siblingOrder).length > 0 || Object.keys(spouseOrder).length > 0)
         }
-        referencePerson={currentRefPerson}
+        referencePerson={isMounted ? currentRefPerson : (people[0] ?? null)}
         onOpenReferenceSelector={() => setIsReferenceModalOpen(true)}
         onResetSiblingOrder={() => {
           if (isReadOnly) return;
@@ -616,7 +635,7 @@ export function TreeWorkspace({
         }}
         onClearHighlights={handleClearHighlights}
         onToggleSidebar={() => setManualSidebarState(!isSidebarOpen)}
-        onToggleCompact={() => setIsCompact((c) => !c)}
+        onToggleCompact={() => setCompactManual(!isCompact)}
         onAddPerson={handleOpenAddPerson}
         onOpenFinder={() => {
           setFinderInitialPerson(selectedPerson);

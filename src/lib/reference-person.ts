@@ -11,6 +11,26 @@ export interface ReferencePersonConfig {
 const REFERENCE_PERSON_PREFIX = "famtree:reference_person:";
 
 /**
+ * Deterministic fallback reference person config based purely on people list.
+ * Identical on both server SSR and client initial hydration.
+ */
+export function getDefaultReferencePersonConfig(
+  people: Person[]
+): ReferencePersonConfig | null {
+  if (people.length > 0) {
+    const sorted = [...people].sort((a, b) =>
+      (a.createdAt || "").localeCompare(b.createdAt || "")
+    );
+    const initialPerson = sorted[0] || people[0];
+    return {
+      personId: initialPerson.id,
+      baseGeneration: 0,
+    };
+  }
+  return null;
+}
+
+/**
  * Retrieves the reference person configuration for a tree.
  * Defaults automatically to the first created person (or earliest person) if not explicitly set.
  */
@@ -40,18 +60,7 @@ export function getReferencePersonConfig(
   }
 
   // Automatic initial fallback: first person added to tree
-  if (people.length > 0) {
-    const sorted = [...people].sort((a, b) =>
-      (a.createdAt || "").localeCompare(b.createdAt || "")
-    );
-    const initialPerson = sorted[0] || people[0];
-    return {
-      personId: initialPerson.id,
-      baseGeneration: 0,
-    };
-  }
-
-  return null;
+  return getDefaultReferencePersonConfig(people);
 }
 
 /**

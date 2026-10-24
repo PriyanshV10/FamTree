@@ -39,7 +39,7 @@ export default function DashboardPage() {
   const [newTreeDesc, setNewTreeDesc] = useState("");
   const [treeToDelete, setTreeToDelete] = useState<FamilyTree | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [backend] = useState<"supabase" | "local">(() => getRepositoryBackend());
+  const backend = getRepositoryBackend(Boolean(user));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleDeleteTree = async () => {
@@ -47,7 +47,7 @@ export default function DashboardPage() {
     setIsDeleting(true);
     setErrorMessage(null);
     try {
-      const repo = getTreeRepository();
+      const repo = getTreeRepository(Boolean(user));
       await repo.deleteTree(treeToDelete.id);
       setTrees((prev) => prev.filter((t) => t.id !== treeToDelete.id));
       setTreeToDelete(null);
@@ -63,7 +63,7 @@ export default function DashboardPage() {
     let isMounted = true;
     async function loadTrees() {
       try {
-        const repo = getTreeRepository();
+        const repo = getTreeRepository(Boolean(user));
         const loaded = await repo.listTrees();
         if (isMounted) {
           setTrees(loaded);
@@ -84,7 +84,7 @@ export default function DashboardPage() {
       isMounted = false;
       window.removeEventListener("famtree:data-synced", handleSync);
     };
-  }, [user?.id]);
+  }, [user?.id, user]);
 
   const filteredTrees = trees.filter(
     (t) =>
@@ -97,13 +97,14 @@ export default function DashboardPage() {
     if (!newTreeName.trim()) return;
 
     setErrorMessage(null);
-    const repo = getTreeRepository();
+    const repo = getTreeRepository(Boolean(user));
     try {
       const ownerName = profile?.fullName || user?.email?.split("@")[0] || "Curator";
       const created = await repo.createTree({
         name: newTreeName.trim(),
         description: newTreeDesc.trim() || "A new family tree record.",
         ownerName,
+        ownerId: user?.id,
         coverColor: "bg-emerald-800",
       });
 

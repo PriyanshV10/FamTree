@@ -245,16 +245,7 @@ export class SupabaseTreeRepository implements ITreeRepository {
           return true;
         }
 
-        // Generic unassigned trees created locally during offline session
-        if (
-          !tree.owner_name ||
-          tree.owner_name === "Tree Curator" ||
-          tree.owner_name === "Curator"
-        ) {
-          return true;
-        }
-
-        // Tree belongs to another specific curator name/email
+        // Tree belongs to another user or unconfirmed curator
         return false;
       }
 

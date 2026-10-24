@@ -35,6 +35,10 @@ export class LocalTreeRepository implements ITreeRepository {
           const peopleArr: Person[] = JSON.parse(storedPeople);
           const relsArr: Relationship[] = JSON.parse(storedRels);
 
+          this.trees.clear();
+          this.people.clear();
+          this.relationships.clear();
+
           treesArr.forEach((t) => this.trees.set(t.id, t));
           peopleArr.forEach((p) => this.people.set(p.id, p));
           relsArr.forEach((r) => this.relationships.set(r.id, r));
@@ -45,11 +49,16 @@ export class LocalTreeRepository implements ITreeRepository {
       }
     }
 
-    // Fallback or Initial Seed
-    DEMO_TREES.forEach((t) => this.trees.set(t.id, { ...t }));
-    DEMO_PEOPLE.forEach((p) => this.people.set(p.id, { ...p }));
-    DEMO_RELATIONSHIPS.forEach((r) => this.relationships.set(r.id, { ...r }));
-    this.persist();
+    // Fallback or Initial Seed (only populate if empty)
+    if (this.trees.size === 0) {
+      this.trees.clear();
+      this.people.clear();
+      this.relationships.clear();
+      DEMO_TREES.forEach((t) => this.trees.set(t.id, { ...t }));
+      DEMO_PEOPLE.forEach((p) => this.people.set(p.id, { ...p }));
+      DEMO_RELATIONSHIPS.forEach((r) => this.relationships.set(r.id, { ...r }));
+      this.persist();
+    }
   }
 
   private persist(): void {
@@ -72,8 +81,42 @@ export class LocalTreeRepository implements ITreeRepository {
     }
   }
 
-  async listTrees(): Promise<FamilyTree[]> {
-    const list = Array.from(this.trees.values());
+  async listTrees(userId?: string): Promise<FamilyTree[]> {
+    this.loadInitialData();
+    let list = Array.from(this.trees.values());
+
+    let currentUserId: string | null = userId ?? null;
+    if (!currentUserId && typeof window !== "undefined") {
+      try {
+        currentUserId = window.localStorage.getItem("famtree_auth_user_id");
+      } catch {
+        // ignore
+      }
+    }
+
+    list = list.filter((t) => {
+      // 1. Starter demo trees are always visible to everyone
+      if (t.isDefault) return true;
+
+      // 2. If logged in with currentUserId:
+      if (currentUserId) {
+        return (
+          !t.ownerId ||
+          t.ownerId === currentUserId ||
+          t.ownerId === "guest" ||
+          t.ownerId === "local-curator"
+        );
+      }
+
+      // 3. If unauthenticated / guest:
+      // Do not display trees owned by a specific logged-in user account
+      if (t.ownerId && t.ownerId !== "guest" && t.ownerId !== "local-curator") {
+        return false;
+      }
+
+      return true;
+    });
+
     // Recalculate member counts dynamically
     return list.map((t) => {
       const memberCount = Array.from(this.people.values()).filter(
@@ -87,6 +130,7 @@ export class LocalTreeRepository implements ITreeRepository {
   }
 
   async getTree(id: string): Promise<FamilyTree | null> {
+    this.loadInitialData();
     const tree = this.trees.get(id);
     if (!tree) return null;
     const memberCount = Array.from(this.people.values()).filter(
