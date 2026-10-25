@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   Lock,
   Layers,
-  Info,
   Palette,
   LogOut,
   LogIn,
@@ -425,34 +424,6 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Phase Architecture Status */}
-        <div className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-[#18201B] p-5 space-y-3">
-          <div className="flex items-center gap-2 text-stone-800 dark:text-stone-200">
-            <Info className="h-4 w-4 text-emerald-800 dark:text-emerald-400" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider">
-              FamTree Engineering Phasing
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-1 text-xs">
-            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5">
-              <span className="font-bold text-emerald-900 dark:text-emerald-300 block">Phases 1-3</span>
-              <span className="text-emerald-700 dark:text-emerald-400 text-[11px]">UI & Domain Engine</span>
-            </div>
-            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5">
-              <span className="font-bold text-emerald-900 dark:text-emerald-300 block">Phases 4-5</span>
-              <span className="text-emerald-700 dark:text-emerald-400 text-[11px]">Supabase & Auth (RLS)</span>
-            </div>
-            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5">
-              <span className="font-bold text-emerald-900 dark:text-emerald-300 block">Phase 6</span>
-              <span className="text-emerald-700 dark:text-emerald-400 text-[11px]">GEDCOM & Polish</span>
-            </div>
-            <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/50 border border-emerald-300 dark:border-emerald-700 p-2.5">
-              <span className="font-bold text-emerald-950 dark:text-emerald-200 block">Phase 7: Ready</span>
-              <span className="text-emerald-800 dark:text-emerald-300 text-[11px]">Production & Deploy</span>
-            </div>
-          </div>
-        </div>
       </main>
 
       <Footer />

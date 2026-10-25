@@ -12,7 +12,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const { user, profile, isConfigured, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const navLinks = [
     { href: "/dashboard", label: "My Trees", icon: Trees },
@@ -34,14 +34,9 @@ export function Navbar() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1B4D3E] dark:bg-emerald-800 text-white shadow-xs group-hover:bg-[#153D31] dark:group-hover:bg-emerald-700 transition-colors">
               <Trees className="h-5 w-5" />
             </div>
-            <div>
-              <span className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100 group-hover:text-[#1B4D3E] dark:group-hover:text-emerald-400 transition-colors font-serif">
-                FamTree
-              </span>
-              <span className="hidden sm:inline-block ml-2 text-xs font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                {isConfigured ? "Supabase Cloud" : "Local Mode"}
-              </span>
-            </div>
+            <span className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100 group-hover:text-[#1B4D3E] dark:group-hover:text-emerald-400 transition-colors font-serif">
+              FamTree
+            </span>
           </Link>
 
           {/* Desktop Navigation */}

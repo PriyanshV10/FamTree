@@ -3,10 +3,12 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/supabase/types";
 import { FamilyTree, Person, Relationship, Gender, RelationshipType } from "@/domain/types";
-
-const STORAGE_KEY_TREES = "famtree:trees:v1";
-const STORAGE_KEY_PEOPLE = "famtree:people:v1";
-const STORAGE_KEY_RELATIONSHIPS = "famtree:relationships:v1";
+import {
+  STORAGE_KEY_TREES,
+  STORAGE_KEY_PEOPLE,
+  STORAGE_KEY_RELATIONSHIPS,
+  STORAGE_KEY_DELETED_TREES,
+} from "./tree-cleanup";
 
 export async function syncLocalAndSupabase(
   userId: string,
@@ -19,24 +21,39 @@ export async function syncLocalAndSupabase(
   let localTrees: FamilyTree[] = [];
   let localPeople: Person[] = [];
   let localRels: Relationship[] = [];
+  let deletedTreeIds: string[] = [];
 
   try {
     const rawTrees = localStorage.getItem(STORAGE_KEY_TREES);
     const rawPeople = localStorage.getItem(STORAGE_KEY_PEOPLE);
     const rawRels = localStorage.getItem(STORAGE_KEY_RELATIONSHIPS);
+    const rawDeleted = localStorage.getItem(STORAGE_KEY_DELETED_TREES);
 
     if (rawTrees) localTrees = JSON.parse(rawTrees);
     if (rawPeople) localPeople = JSON.parse(rawPeople);
     if (rawRels) localRels = JSON.parse(rawRels);
+    if (rawDeleted) deletedTreeIds = JSON.parse(rawDeleted);
   } catch (err) {
     console.warn("Could not read local trees for sync:", err);
+  }
+
+  // Ensure tombstoned/deleted trees are deleted from Supabase
+  if (deletedTreeIds.length > 0) {
+    for (const delId of deletedTreeIds) {
+      try {
+        await client.from("family_trees").delete().eq("id", delId);
+      } catch {
+        // ignore
+      }
+    }
   }
 
   let syncedCount = 0;
 
   // 1. Find local trees that are either unowned (guest) or belong to this user
-  // Do NOT sync trees that belong to a different user ("only if the same user")
+  // Do NOT sync trees that were deleted or belong to a different user
   const treesToSync = localTrees.filter((t) => {
+    if (deletedTreeIds.includes(t.id)) return false;
     // Skip default demo trees unless modified
     if (t.isDefault) return false;
     // If tagged with a DIFFERENT user ID, do NOT upload to this user
@@ -156,6 +173,8 @@ export async function syncLocalAndSupabase(
       .select("*");
 
     const userDbTrees = (allDbTrees || []).filter((dbt) => {
+      // Do not re-import trees that were deleted by user
+      if (deletedTreeIds.includes(dbt.id)) return false;
       // 1. Owned by this user
       if (dbt.owner_id === userId) return true;
       // 2. Unowned tree created by this user

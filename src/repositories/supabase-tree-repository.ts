@@ -10,6 +10,7 @@ import {
 } from "./types";
 import { createId, getCurrentTimestamp } from "@/lib/utils";
 import { DEMO_TREES, DEMO_PEOPLE, DEMO_RELATIONSHIPS } from "@/data/demo-data";
+import { purgeTreeLocally, STORAGE_KEY_DELETED_TREES } from "@/lib/sync/tree-cleanup";
 
 type DbPersonRow = Database["public"]["Tables"]["people"]["Row"];
 type DbRelationshipRow = Database["public"]["Tables"]["relationships"]["Row"];
@@ -217,7 +218,20 @@ export class SupabaseTreeRepository implements ITreeRepository {
     }
 
     // Filter trees based on user ownership and claim legacy/unassigned trees
+    let deletedTreeIds: string[] = [];
+    if (typeof window !== "undefined") {
+      try {
+        const rawDeleted = window.localStorage.getItem(STORAGE_KEY_DELETED_TREES);
+        if (rawDeleted) deletedTreeIds = JSON.parse(rawDeleted);
+      } catch {
+        // ignore
+      }
+    }
+
     const filteredTrees = rawTrees.filter((tree) => {
+      // 0. Exclude trees deleted by user
+      if (deletedTreeIds.includes(tree.id)) return false;
+
       // 1. If tree has an owner_id:
       if (tree.owner_id) {
         // Return if it belongs to current user
@@ -272,6 +286,17 @@ export class SupabaseTreeRepository implements ITreeRepository {
   }
 
   async getTree(id: string): Promise<FamilyTree | null> {
+    if (typeof window !== "undefined") {
+      try {
+        const rawDeleted = window.localStorage.getItem(STORAGE_KEY_DELETED_TREES);
+        if (rawDeleted) {
+          const deletedIds: string[] = JSON.parse(rawDeleted);
+          if (deletedIds.includes(id)) return null;
+        }
+      } catch {
+        // ignore
+      }
+    }
     let currentUserId: string | null = null;
     let currentUserEmailPrefix: string | null = null;
     try {
@@ -440,14 +465,73 @@ export class SupabaseTreeRepository implements ITreeRepository {
   }
 
   async deleteTree(id: string): Promise<void> {
-    const { error } = await this.client
+    let currentUserId: string | null = null;
+    try {
+      const { data: authData } = await this.client.auth.getUser();
+      currentUserId = authData?.user?.id || null;
+    } catch {
+      // Unauthenticated
+    }
+
+    // 1. If user is logged in, attempt to claim unowned tree first to satisfy RLS
+    if (currentUserId) {
+      try {
+        await this.client
+          .from("family_trees")
+          .update({ owner_id: currentUserId })
+          .eq("id", id)
+          .is("owner_id", null);
+      } catch {
+        // Continue
+      }
+    }
+
+    // 2. Cascade delete dependent records first
+    try {
+      await this.client.from("relationships").delete().eq("tree_id", id);
+    } catch {
+      // Continue
+    }
+    try {
+      await this.client.from("people").delete().eq("tree_id", id);
+    } catch {
+      // Continue
+    }
+    try {
+      await this.client.from("family_tree_members").delete().eq("tree_id", id);
+    } catch {
+      // Continue
+    }
+
+    // 3. Delete from family_trees and check returned data
+    const { data, error } = await this.client
       .from("family_trees")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .select();
 
     if (error) {
       throw new RepositoryError(`Failed to delete tree '${id}': ${error.message}`, error.code, error);
     }
+
+    // If data is returned as empty array, it means Postgres RLS blocked row deletion
+    if (data && data.length === 0) {
+      const { data: stillExists } = await this.client
+        .from("family_trees")
+        .select("id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (stillExists) {
+        throw new RepositoryError(
+          `Permission denied: Could not delete tree '${id}'. Please execute migration 20261027000000_fix_tree_delete_and_ownership.sql in your Supabase SQL Editor.`,
+          "RLS_DELETE_DENIED"
+        );
+      }
+    }
+
+    // 4. Clean up local storage caches completely
+    purgeTreeLocally(id);
   }
 
   /**
@@ -455,6 +539,17 @@ export class SupabaseTreeRepository implements ITreeRepository {
    * Avoids N+1 requests.
    */
   async getTreeGraph(treeId: string): Promise<TreeGraphData | null> {
+    if (typeof window !== "undefined") {
+      try {
+        const rawDeleted = window.localStorage.getItem(STORAGE_KEY_DELETED_TREES);
+        if (rawDeleted) {
+          const deletedIds: string[] = JSON.parse(rawDeleted);
+          if (deletedIds.includes(treeId)) return null;
+        }
+      } catch {
+        // ignore
+      }
+    }
     const [treeResult, peopleResult, relsResult] = await Promise.all([
       this.client.from("family_trees").select("*").eq("id", treeId).maybeSingle(),
       this.client.from("people").select("*").eq("tree_id", treeId).order("created_at"),

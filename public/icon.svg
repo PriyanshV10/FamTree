@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064E3B" />
+      <stop offset="50%" stop-color="#0D5F47" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+
+    <!-- Node Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+
+    <!-- Leaf / Canopy Gradient -->
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#A7F3D0" />
+      <stop offset="100%" stop-color="#34D399" />
+    </linearGradient>
+
+    <!-- Subtle Drop Shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base Container -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)" />
+  <rect x="22" y="22" width="468" height="468" rx="106" fill="none" stroke="#6EE7B7" stroke-width="4" stroke-opacity="0.25" />
+
+  <!-- Tree & Lineage Group -->
+  <g filter="url(#shadow)" transform="translate(0, 4)">
+    <!-- Tree Trunk and Root Base -->
+    <path
+      d="M256 420 L256 260 M224 420 C240 395 256 360 256 320 M288 420 C272 395 256 360 256 320"
+      fill="none"
+      stroke="#D1FAE5"
+      stroke-width="16"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Genealogical Branching Lines (Connecting Generations) -->
+    <!-- Center to Left Generation Branch -->
+    <path
+      d="M256 260 C256 210 160 220 160 170"
+      fill="none"
+      stroke="#A7F3D0"
+      stroke-width="14"
+      stroke-linecap="round"
+    />
+    <!-- Center to Right Generation Branch -->
+    <path
+      d="M256 260 C256 210 352 220 352 170"
+      fill="none"
+      stroke="#A7F3D0"
+      stroke-width="14"
+      stroke-linecap="round"
+    />
+    <!-- Center to Top Apex Branch -->
+    <path
+      d="M256 260 L256 128"
+      fill="none"
+      stroke="#A7F3D0"
+      stroke-width="14"
+      stroke-linecap="round"
+    />
+
+    <!-- Secondary Cross-Ancestry Ties (Generational Links) -->
+    <path
+      d="M160 170 C160 140 210 140 256 128 M352 170 C352 140 302 140 256 128"
+      fill="none"
+      stroke="#6EE7B7"
+      stroke-width="6"
+      stroke-dasharray="10 8"
+      stroke-linecap="round"
+      stroke-opacity="0.8"
+    />
+
+    <!-- Tree Canopy Foliage Shapes (Stylized Cloud / Leaves) -->
+    <!-- Left Leaf Canopy -->
+    <circle cx="160" cy="170" r="44" fill="url(#leafGrad)" fill-opacity="0.2" />
+    <circle cx="160" cy="170" r="32" fill="#064E3B" stroke="#34D399" stroke-width="8" />
+
+    <!-- Right Leaf Canopy -->
+    <circle cx="352" cy="170" r="44" fill="url(#leafGrad)" fill-opacity="0.2" />
+    <circle cx="352" cy="170" r="32" fill="#064E3B" stroke="#34D399" stroke-width="8" />
+
+    <!-- Central Apex Canopy (Root Ancestor Node) -->
+    <circle cx="256" cy="120" r="52" fill="url(#leafGrad)" fill-opacity="0.25" />
+    <circle cx="256" cy="120" r="38" fill="#064E3B" stroke="#FBBF24" stroke-width="10" />
+
+    <!-- Central Trunk Junction Node -->
+    <circle cx="256" cy="260" r="18" fill="#FBBF24" />
+
+    <!-- Lineage Person Anchors / Golden Badges -->
+    <circle cx="256" cy="120" r="16" fill="url(#goldGrad)" />
+    <circle cx="160" cy="170" r="14" fill="#E0E7FF" />
+    <circle cx="352" cy="170" r="14" fill="#E0E7FF" />
+
+    <!-- Mini Descendant Leaves / Nodes at Base -->
+    <circle cx="200" cy="350" r="12" fill="#34D399" />
+    <circle cx="312" cy="350" r="12" fill="#34D399" />
+    <path
+      d="M256 320 C235 320 200 335 200 350 M256 320 C277 320 312 335 312 350"
+      fill="none"
+      stroke="#34D399"
+      stroke-width="6"
+      stroke-linecap="round"
+    />
+  </g>
+</svg>

@@ -151,4 +151,44 @@ describe("SupabaseTreeRepository", () => {
       repo.updatePerson("tree-1", "nonexistent-person", { firstName: "Changed" })
     ).rejects.toThrow(NotFoundError);
   });
+
+  it("deletes a tree and purges dependencies", async () => {
+    const mockClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-123", email: "user@example.com" } },
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "family_trees") {
+          return {
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                is: vi.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+            delete: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                select: vi.fn().mockResolvedValue({
+                  data: [{ id: "tree-to-del" }],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          delete: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        };
+      }),
+    } as unknown as SupabaseClient<Database>;
+
+    const repo = new SupabaseTreeRepository(mockClient);
+    await expect(repo.deleteTree("tree-to-del")).resolves.toBeUndefined();
+    expect(mockClient.from).toHaveBeenCalledWith("family_trees");
+    expect(mockClient.from).toHaveBeenCalledWith("people");
+    expect(mockClient.from).toHaveBeenCalledWith("relationships");
+  });
 });

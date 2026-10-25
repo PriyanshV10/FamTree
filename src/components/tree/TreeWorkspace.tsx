@@ -41,6 +41,7 @@ import { AlertCircle, X, Trash2, Eye, GitFork, LogIn } from "lucide-react";
 import { getPersonFullName } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthContext";
 import { duplicateTreeToAccount } from "@/lib/tree-clone";
+import { purgeTreeLocally, STORAGE_KEY_DELETED_TREES } from "@/lib/sync/tree-cleanup";
 
 interface TreeWorkspaceProps {
   initialTree: FamilyTree;
@@ -84,8 +85,9 @@ export function TreeWorkspace({
   const [isCloningTree, setIsCloningTree] = useState(false);
   const [editorPromptDismissed, setEditorPromptDismissed] = useState(false);
 
+  const userEmailPrefix = user?.email?.split("@")[0].toLowerCase();
   const isOwner = Boolean(
-    (user && tree.ownerId && tree.ownerId === user.id) ||
+    (user && (tree.ownerId === user.id || !tree.ownerId || (userEmailPrefix && tree.ownerName?.toLowerCase().includes(userEmailPrefix)))) ||
     (!user && (!tree.ownerId || tree.ownerId === "guest" || tree.ownerId === "local-curator"))
   );
 
@@ -121,6 +123,23 @@ export function TreeWorkspace({
       setIsCloningTree(false);
     }
   };
+
+  // Redirect if tree was tombstoned/deleted
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const rawDeleted = window.localStorage.getItem(STORAGE_KEY_DELETED_TREES);
+        if (rawDeleted) {
+          const deletedIds: string[] = JSON.parse(rawDeleted);
+          if (deletedIds.includes(initialTree.id)) {
+            router.replace("/dashboard");
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [initialTree.id, router]);
 
   // Sync latest persisted data from repository on mount
   useEffect(() => {
@@ -517,9 +536,45 @@ export function TreeWorkspace({
     setIsDeletingTree(true);
     setErrorMessage(null);
     try {
+      const targetId = tree.id;
+
+      // 1. Try server-side delete endpoint first (can bypass RLS if service role key is present)
+      try {
+        await fetch(`/api/trees/${encodeURIComponent(targetId)}`, {
+          method: "DELETE",
+        });
+      } catch {
+        // Fall back to direct repository deletion
+      }
+
+      // 2. Delete via active repository
       const repo = getTreeRepository(Boolean(user));
-      await repo.deleteTree(tree.id);
+      try {
+        await repo.deleteTree(targetId);
+      } catch (repoErr: unknown) {
+        // Purge locally even if cloud delete failed due to RLS
+        const localRepo = getTreeRepository(false);
+        try {
+          await localRepo.deleteTree(targetId);
+        } catch {
+          // ignore
+        }
+        purgeTreeLocally(targetId);
+        throw repoErr;
+      }
+
+      // 3. Delete via local repository and purge localStorage caches
+      const localRepo = getTreeRepository(false);
+      try {
+        await localRepo.deleteTree(targetId);
+      } catch {
+        // ignore
+      }
+      purgeTreeLocally(targetId);
+
+      setIsDeleteTreeModalOpen(false);
       router.push("/dashboard");
+      router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to delete tree.";
       setErrorMessage(msg);
@@ -781,12 +836,25 @@ export function TreeWorkspace({
       {/* Delete Family Tree Confirmation Dialog */}
       <Dialog
         isOpen={isDeleteTreeModalOpen}
-        onClose={() => setIsDeleteTreeModalOpen(false)}
+        onClose={() => {
+          if (!isDeletingTree) {
+            setIsDeleteTreeModalOpen(false);
+            setErrorMessage(null);
+          }
+        }}
         title="Delete Family Tree?"
         description={`Are you sure you want to permanently delete "${tree.name}"? All ${people.length} family members, records, and relationships will be erased.`}
         maxWidth="md"
       >
         <div className="space-y-4 pt-2">
+          {errorMessage && (
+            <div className="rounded-lg bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 p-3 text-xs text-red-900 dark:text-red-200 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <strong>Deletion Error:</strong> {errorMessage}
+              </div>
+            </div>
+          )}
           <div className="rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 p-3 text-xs text-red-800 dark:text-red-300">
             <strong>Warning:</strong> This action cannot be undone. The entire lineage record will be removed from the database and you will be returned to the dashboard.
           </div>
@@ -794,7 +862,10 @@ export function TreeWorkspace({
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsDeleteTreeModalOpen(false)}
+              onClick={() => {
+                setIsDeleteTreeModalOpen(false);
+                setErrorMessage(null);
+              }}
               disabled={isDeletingTree}
             >
               Cancel

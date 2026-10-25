@@ -7,6 +7,7 @@ import {
 } from "./types";
 import { DEMO_TREES, DEMO_PEOPLE, DEMO_RELATIONSHIPS } from "@/data/demo-data";
 import { createId, getCurrentTimestamp } from "@/lib/utils";
+import { purgeTreeLocally, STORAGE_KEY_DELETED_TREES } from "@/lib/sync/tree-cleanup";
 
 const STORAGE_KEY_TREES = "famtree:trees:v1";
 const STORAGE_KEY_PEOPLE = "famtree:people:v1";
@@ -85,6 +86,16 @@ export class LocalTreeRepository implements ITreeRepository {
     this.loadInitialData();
     let list = Array.from(this.trees.values());
 
+    let deletedTreeIds: string[] = [];
+    if (this.isBrowser) {
+      try {
+        const rawDeleted = window.localStorage.getItem(STORAGE_KEY_DELETED_TREES);
+        if (rawDeleted) deletedTreeIds = JSON.parse(rawDeleted);
+      } catch {
+        // ignore
+      }
+    }
+
     let currentUserId: string | null = userId ?? null;
     if (!currentUserId && typeof window !== "undefined") {
       try {
@@ -95,6 +106,9 @@ export class LocalTreeRepository implements ITreeRepository {
     }
 
     list = list.filter((t) => {
+      // 0. Exclude any trees deleted by user
+      if (deletedTreeIds.includes(t.id)) return false;
+
       // 1. Starter demo trees are always visible to everyone
       if (t.isDefault) return true;
 
@@ -131,6 +145,17 @@ export class LocalTreeRepository implements ITreeRepository {
 
   async getTree(id: string): Promise<FamilyTree | null> {
     this.loadInitialData();
+    if (this.isBrowser) {
+      try {
+        const rawDeleted = window.localStorage.getItem(STORAGE_KEY_DELETED_TREES);
+        if (rawDeleted) {
+          const deletedIds: string[] = JSON.parse(rawDeleted);
+          if (deletedIds.includes(id)) return null;
+        }
+      } catch {
+        // ignore
+      }
+    }
     const tree = this.trees.get(id);
     if (!tree) return null;
     const memberCount = Array.from(this.people.values()).filter(
@@ -182,7 +207,9 @@ export class LocalTreeRepository implements ITreeRepository {
   }
 
   async deleteTree(id: string): Promise<void> {
+    this.loadInitialData();
     if (!this.trees.has(id)) {
+      purgeTreeLocally(id);
       throw new NotFoundError(`Family tree '${id}' not found`);
     }
     this.trees.delete(id);
@@ -199,6 +226,7 @@ export class LocalTreeRepository implements ITreeRepository {
       }
     }
     this.persist();
+    purgeTreeLocally(id);
   }
 
   async getTreeGraph(treeId: string): Promise<TreeGraphData | null> {

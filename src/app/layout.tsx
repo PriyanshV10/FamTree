@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   title: "FamTree — Family Tree Generator & Lineage Explorer",
   description:
     "Explore your ancestry, build multi-generational family trees, and discover precise family relationships with FamTree.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-icon.png",
+  },
 };
 
 const themeScript = `
